@@ -25,7 +25,7 @@ except Exception:  # noqa: BLE001
 
 
 class GPUMonitor:
-    """Background sampler for GPU utilisation statistics via NVML."""
+    # Background sampler for GPU utilisation statistics via NVML.
 
     def __init__(self, device_index=None, interval=0.2):
         self.device_index = device_index
@@ -85,7 +85,7 @@ class GPUMonitor:
 
 
 class TelemetrySession:
-    """Collects wall time, device, and process memory metrics for a run."""
+    # Collects Telemetry for Bennchmarking
 
     def __init__(self, device_index=None, interval=0.2):
         self._gpu_monitor = GPUMonitor(device_index=device_index, interval=interval)
