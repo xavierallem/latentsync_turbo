@@ -59,19 +59,25 @@ class LipsyncPipeline(DiffusionPipeline):
     ):
         super().__init__()
 
-        if hasattr(scheduler.config, "steps_offset") and scheduler.config.steps_offset != 1:
-            deprecation_message = (
-                f"The configuration file of this scheduler: {scheduler} is outdated. `steps_offset`"
-                f" should be set to 1 instead of {scheduler.config.steps_offset}. Please make sure "
-                "to update the config accordingly as leaving `steps_offset` might led to incorrect results"
-                " in future versions. If you have downloaded this checkpoint from the Hugging Face Hub,"
-                " it would be very nice if you could open a Pull request for the `scheduler/scheduler_config.json`"
-                " file"
-            )
-            deprecate("steps_offset!=1", "1.0.0", deprecation_message, standard_warn=False)
-            new_config = dict(scheduler.config)
-            new_config["steps_offset"] = 1
-            scheduler._internal_dict = FrozenDict(new_config)
+        if isinstance(scheduler, DPMSolverMultistepScheduler):
+            if hasattr(scheduler.config, "steps_offset") and scheduler.config.steps_offset != 0:
+                new_config = dict(scheduler.config)
+                new_config["steps_offset"] = 0
+                scheduler._internal_dict = FrozenDict(new_config)
+        else:
+            if hasattr(scheduler.config, "steps_offset") and scheduler.config.steps_offset != 1:
+                deprecation_message = (
+                    f"The configuration file of this scheduler: {scheduler} is outdated. `steps_offset`"
+                    f" should be set to 1 instead of {scheduler.config.steps_offset}. Please make sure "
+                    "to update the config accordingly as leaving `steps_offset` might led to incorrect results"
+                    " in future versions. If you have downloaded this checkpoint from the Hugging Face Hub,"
+                    " it would be very nice if you could open a Pull request for the `scheduler/scheduler_config.json`"
+                    " file"
+                )
+                deprecate("steps_offset!=1", "1.0.0", deprecation_message, standard_warn=False)
+                new_config = dict(scheduler.config)
+                new_config["steps_offset"] = 1
+                scheduler._internal_dict = FrozenDict(new_config)
 
         if hasattr(scheduler.config, "clip_sample") and scheduler.config.clip_sample is True:
             deprecation_message = (
@@ -355,8 +361,12 @@ class LipsyncPipeline(DiffusionPipeline):
         do_classifier_free_guidance = guidance_scale > 1.0
 
         # 3. set timesteps
-        self.scheduler.set_timesteps(num_inference_steps, device=device)
-        timesteps = self.scheduler.timesteps
+        reuse_timesteps = not isinstance(self.scheduler, DPMSolverMultistepScheduler)
+        if reuse_timesteps:
+            self.scheduler.set_timesteps(num_inference_steps, device=device)
+            timesteps = self.scheduler.timesteps
+        else:
+            timesteps = None
 
         # 4. Prepare extra step kwargs.
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
@@ -386,6 +396,11 @@ class LipsyncPipeline(DiffusionPipeline):
 
         num_inferences = math.ceil(len(whisper_chunks) / num_frames)
         for i in tqdm.tqdm(range(num_inferences), desc="Doing inference..."):
+            if not reuse_timesteps:
+                # Reset DPMSolver internal state between batched inference segments
+                self.scheduler.set_timesteps(num_inference_steps, device=device)
+                timesteps = self.scheduler.timesteps
+
             if self.unet.add_audio_layer:
                 audio_embeds = torch.stack(whisper_chunks[i * num_frames : (i + 1) * num_frames])
                 audio_embeds = audio_embeds.to(device, dtype=weight_dtype)

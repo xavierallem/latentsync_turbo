@@ -13,14 +13,18 @@
 # limitations under the License.
 
 import argparse
+import json
 import os
+from datetime import datetime
+from pathlib import Path
 from omegaconf import OmegaConf
 import torch
-from diffusers import AutoencoderKL, DDIMScheduler
+from diffusers import AutoencoderKL, DDIMScheduler, DPMSolverMultistepScheduler
 from latentsync.models.unet import UNet3DConditionModel
 from latentsync.pipelines.lipsync_pipeline import LipsyncPipeline
 from accelerate.utils import set_seed
 from latentsync.whisper.audio2feature import Audio2Feature
+from latentsync.utils.telemetry import TelemetrySession
 from DeepCache import DeepCacheSDHelper
 
 
@@ -39,6 +43,19 @@ def main(config, args):
     print(f"Loaded checkpoint path: {args.inference_ckpt_path}")
 
     scheduler = DDIMScheduler.from_pretrained("configs")
+    if getattr(args, "use_dpm_solver", False):
+        scheduler = DPMSolverMultistepScheduler.from_config(
+            scheduler.config,
+            lower_order_final=True,
+        )
+        if getattr(scheduler.config, "steps_offset", 0) != 0:
+            scheduler.register_to_config(steps_offset=0)
+        if getattr(scheduler.config, "solver_order", None) != 1:
+            scheduler.register_to_config(solver_order=1)
+        scheduler.solver_order = 1
+
+    scheduler_name = type(scheduler).__name__
+    print(f"Scheduler: {scheduler_name} (use_dpm_solver={getattr(args, 'use_dpm_solver', False)})")
 
     if config.model.cross_attention_dim == 768:
         whisper_model_path = "checkpoints/whisper/small.pt"
@@ -86,19 +103,44 @@ def main(config, args):
 
     print(f"Initial seed: {torch.initial_seed()}")
 
-    pipeline(
-        video_path=args.video_path,
-        audio_path=args.audio_path,
-        video_out_path=args.video_out_path,
-        num_frames=config.data.num_frames,
-        num_inference_steps=args.inference_steps,
-        guidance_scale=args.guidance_scale,
-        weight_dtype=dtype,
-        width=config.data.resolution,
-        height=config.data.resolution,
-        mask_image_path=config.data.mask_image_path,
-        temp_dir=args.temp_dir,
-    )
+    telemetry = TelemetrySession()
+    with telemetry:
+        pipeline(
+            video_path=args.video_path,
+            audio_path=args.audio_path,
+            video_out_path=args.video_out_path,
+            num_frames=config.data.num_frames,
+            num_inference_steps=args.inference_steps,
+            guidance_scale=args.guidance_scale,
+            weight_dtype=dtype,
+            width=config.data.resolution,
+            height=config.data.resolution,
+            mask_image_path=config.data.mask_image_path,
+            temp_dir=args.temp_dir,
+        )
+
+    metrics = telemetry.metrics()
+
+    temp_dir = Path(args.temp_dir)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    video_stem = Path(args.video_path).stem or "latentsync"
+    metrics_path = temp_dir / f"{video_stem}_{timestamp}_metrics.json"
+
+    metrics_record = {
+        "timestamp": timestamp,
+        "video_path": args.video_path,
+        "audio_path": args.audio_path,
+        "output_path": args.video_out_path,
+        "guidance_scale": args.guidance_scale,
+        "inference_steps": args.inference_steps,
+        "use_dpm_solver": getattr(args, "use_dpm_solver", False),
+        "seed": int(args.seed) if hasattr(args, "seed") else None,
+        "metrics": metrics,
+    }
+
+    metrics_path.write_text(json.dumps(metrics_record, indent=2))
+    print(f"Metrics saved to {metrics_path}")
 
 
 if __name__ == "__main__":
@@ -113,6 +155,14 @@ if __name__ == "__main__":
     parser.add_argument("--temp_dir", type=str, default="temp")
     parser.add_argument("--seed", type=int, default=1247)
     parser.add_argument("--enable_deepcache", action="store_true")
+    parser.set_defaults(use_dpm_solver=True)
+    parser.add_argument("--use_dpm_solver", action="store_true")
+    parser.add_argument(
+        "--use_ddim_scheduler",
+        action="store_false",
+        dest="use_dpm_solver",
+        help="Fallback to DDIM scheduler instead of DPM-Solver.",
+    )
     args = parser.parse_args()
 
     config = OmegaConf.load(args.unet_config_path)

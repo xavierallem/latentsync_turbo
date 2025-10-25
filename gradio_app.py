@@ -1,9 +1,13 @@
-import gradio as gr
-from pathlib import Path
-from scripts.inference import main
-from omegaconf import OmegaConf
 import argparse
+import json
 from datetime import datetime
+from pathlib import Path
+
+import gradio as gr
+from omegaconf import OmegaConf
+
+from scripts.inference import main
+from latentsync.utils.telemetry import TelemetrySession
 
 CONFIG_PATH = Path("configs/unet/stage2_512.yaml")
 CHECKPOINT_PATH = Path("checkpoints/latentsync_unet.pt")
@@ -14,6 +18,7 @@ def process_video(
     audio_path,
     guidance_scale,
     inference_steps,
+    use_dpm_solver,
     seed,
 ):
     # Create the temp directory if it doesn't exist
@@ -39,22 +44,57 @@ def process_video(
     )
 
     # Parse the arguments
-    args = create_args(video_path, audio_path, output_path, inference_steps, guidance_scale, seed)
+    args = create_args(
+        video_path,
+        audio_path,
+        output_path,
+        inference_steps,
+        guidance_scale,
+        use_dpm_solver,
+        seed,
+    )
 
+    telemetry = TelemetrySession()
     try:
-        result = main(
-            config=config,
-            args=args,
-        )
-        print("Processing completed successfully.")
-        return output_path  # Ensure the output path is returned
-    except Exception as e:
-        print(f"Error during processing: {str(e)}")
-        raise gr.Error(f"Error during processing: {str(e)}")
+        with telemetry:
+            main(
+                config=config,
+                args=args,
+            )
+    except Exception as exc:  # noqa: BLE001
+        print(f"Error during processing: {str(exc)}")
+        raise gr.Error(f"Error during processing: {str(exc)}") from exc
+
+    metrics = telemetry.metrics()
+
+    metrics_record = {
+        "timestamp": current_time,
+        "video_path": video_path,
+        "audio_path": audio_path,
+        "output_path": output_path,
+        "guidance_scale": guidance_scale,
+        "inference_steps": inference_steps,
+        "use_dpm_solver": use_dpm_solver,
+        "seed": int(seed),
+        "metrics": metrics,
+    }
+
+    metrics_path = output_dir / f"{video_file_path.stem}_{current_time}_metrics.json"
+    metrics_path.write_text(json.dumps(metrics_record, indent=2))
+    metrics["metrics_file"] = metrics_path.as_posix()
+
+    print("Processing completed successfully.")
+    return output_path, metrics
 
 
 def create_args(
-    video_path: str, audio_path: str, output_path: str, inference_steps: int, guidance_scale: float, seed: int
+    video_path: str,
+    audio_path: str,
+    output_path: str,
+    inference_steps: int,
+    guidance_scale: float,
+    use_dpm_solver: bool,
+    seed: int,
 ) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--inference_ckpt_path", type=str, required=True)
@@ -66,6 +106,13 @@ def create_args(
     parser.add_argument("--temp_dir", type=str, default="temp")
     parser.add_argument("--seed", type=int, default=1247)
     parser.add_argument("--enable_deepcache", action="store_true")
+    parser.set_defaults(use_dpm_solver=True)
+    parser.add_argument("--use_dpm_solver", action="store_true")
+    parser.add_argument(
+        "--use_ddim_scheduler",
+        action="store_false",
+        dest="use_dpm_solver",
+    )
 
     return parser.parse_args(
         [
@@ -81,11 +128,14 @@ def create_args(
             str(inference_steps),
             "--guidance_scale",
             str(guidance_scale),
-            "--seed",
-            str(seed),
             "--temp_dir",
             "temp",
             "--enable_deepcache",
+        ]
+        + (["--use_dpm_solver"] if use_dpm_solver else ["--use_ddim_scheduler"])
+        + [
+            "--seed",
+            str(seed),
         ]
     )
 
@@ -123,12 +173,14 @@ with gr.Blocks(title="LatentSync demo") as demo:
                 inference_steps = gr.Slider(minimum=10, maximum=50, value=20, step=1, label="Inference Steps")
 
             with gr.Row():
+                use_dpm_solver = gr.Checkbox(label="Use DPM-Solver scheduler", value=True)
                 seed = gr.Number(value=1247, label="Random Seed", precision=0)
 
             process_btn = gr.Button("Process Video")
 
         with gr.Column():
             video_output = gr.Video(label="Output Video")
+            metrics_output = gr.JSON(label="Inference Metrics")
 
             gr.Examples(
                 examples=[
@@ -146,9 +198,10 @@ with gr.Blocks(title="LatentSync demo") as demo:
             audio_input,
             guidance_scale,
             inference_steps,
+            use_dpm_solver,
             seed,
         ],
-        outputs=video_output,
+        outputs=[video_output, metrics_output],
     )
 
 if __name__ == "__main__":

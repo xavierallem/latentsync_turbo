@@ -11,6 +11,7 @@
 
 ## 🔥 Updates
 
+- `2025/10/25`: Added community-supplied inference optimizations (scheduler safeguards, CLI telemetry logging, optional DDIM fallback) while keeping the upstream model unchanged. Full credit remains with the original LatentSync authors.
 - `2025/06/11`: We released **LatentSync 1.6**, which is trained on 512 $\times$ 512 resolution videos to mitigate the blurriness problem. Watch the demo [here](docs/changelog_v1.6.md).
 
 - `2025/03/14`: We released **LatentSync 1.5**, which **(1)** improves temporal consistency via adding temporal layer, **(2)** improves performance on Chinese videos and **(3)** reduces the VRAM requirement of the stage2 training to **20 GB** through a series of optimizations. Learn more details [here](docs/changelog_v1.5.md).
@@ -132,6 +133,8 @@ You can try adjusting the following inference parameters to achieve better resul
 
 - `inference_steps` [20-50]: A higher value improves visual quality but slows down the generation speed.
 - `guidance_scale` [1.0-3.0]: A higher value improves lip-sync accuracy but may cause the video distortion or jitter.
+- `--use_ddim_scheduler`: Toggle to the legacy DDIM sampler when you prefer the original setup; DPM-Solver remains available with internal guards to prevent sigma overflows.
+- Telemetry: CLI and Gradio runs now emit JSON metrics (runtime, GPU/CPU memory) into `temp/` for easier profiling during experiments.
 
 ## 🔄 Data Processing Pipeline
 
@@ -213,6 +216,8 @@ Note that our released SyncNet is trained on data processed through our data pro
 - Some code are borrowed from [MuseTalk](https://github.com/TMElyralab/MuseTalk), [StyleSync](https://github.com/guanjz20/StyleSync), [SyncNet](https://github.com/joonson/syncnet_python), [Wav2Lip](https://github.com/Rudrabha/Wav2Lip).
 
 Thanks for their generous contributions to the open-source community!
+
+All credit for LatentSync belongs to the original creators; these adjustments only surface small inference conveniences contributed downstream.
 
 ## 📖 Citation
 

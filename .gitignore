@@ -25,7 +25,7 @@ wandb/
 /venv/
 /detect_results/
 /temp
-
+/docs
 # checkpoint files
 *.safetensors
 *.ckpt

@@ -1,0 +1,24 @@
+{
+  "timestamp": "20251025_183133",
+  "video_path": "assets/demo1_video.mp4",
+  "audio_path": "assets/demo1_audio.wav",
+  "output_path": "video_out.mp4",
+  "guidance_scale": 1.7,
+  "inference_steps": 25,
+  "use_dpm_solver": false,
+  "seed": 1247,
+  "metrics": {
+    "elapsed_seconds": 2076.359,
+    "peak_cuda_memory_mib": 13404.05,
+    "process_ram_mib": 3834.58,
+    "process_ram_delta_mib": 612.91,
+    "gpu_util_avg_percent": 96.45,
+    "gpu_util_max_percent": 100.0,
+    "mem_util_avg_percent": 2.17,
+    "mem_util_max_percent": 97.0,
+    "mem_used_max_mib": 12102.76,
+    "samples_collected": 4015,
+    "SyncNet confidence": 2.06,
+    "AV offset": 0
+  }
+}
