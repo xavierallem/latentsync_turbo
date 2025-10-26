@@ -277,35 +277,11 @@ class VersatileAttention(Attention):
         else:
             raise NotImplementedError
 
-        if self.group_norm is not None:
-            hidden_states = self.group_norm(hidden_states.transpose(1, 2)).transpose(1, 2)
-
-        query = self.to_q(hidden_states)
-        query = self.split_heads(query)
-
-        encoder_hidden_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
-        key = self.to_k(encoder_hidden_states)
-        value = self.to_v(encoder_hidden_states)
-
-        key = self.split_heads(key)
-        value = self.split_heads(value)
-
-        if attention_mask is not None:
-            if attention_mask.shape[-1] != query.shape[1]:
-                target_length = query.shape[1]
-                attention_mask = F.pad(attention_mask, (0, target_length), value=0.0)
-                attention_mask = attention_mask.repeat_interleave(self.heads, dim=0)
-
-        # Use PyTorch native implementation of FlashAttention-2
-        hidden_states = F.scaled_dot_product_attention(query, key, value, attn_mask=attention_mask)
-
-        hidden_states = self.concat_heads(hidden_states)
-
-        # linear proj
-        hidden_states = self.to_out[0](hidden_states)
-
-        # dropout
-        hidden_states = self.to_out[1](hidden_states)
+        hidden_states = super().forward(
+            hidden_states,
+            encoder_hidden_states=encoder_hidden_states,
+            attention_mask=attention_mask,
+        )
 
         if self.attention_mode == "Temporal":
             hidden_states = rearrange(hidden_states, "(b s) f c -> (b f) s c", s=s)

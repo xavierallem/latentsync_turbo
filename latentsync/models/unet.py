@@ -23,6 +23,7 @@ from .unet_blocks import (
     get_up_block,
 )
 from .resnet import InflatedConv3d, InflatedGroupNorm
+from .attention import Attention
 
 from ..utils.util import zero_rank_log
 from .utils import zero_module
@@ -88,6 +89,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         time_embed_dim = block_out_channels[0] * 4
         self.use_motion_module = use_motion_module
         self.add_audio_layer = add_audio_layer
+        self._flash_attention_enabled = False
 
         self.conv_in = zero_module(InflatedConv3d(in_channels, block_out_channels[0], kernel_size=3, padding=(1, 1)))
 
@@ -239,6 +241,18 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         self.conv_act = nn.SiLU()
 
         self.conv_out = zero_module(InflatedConv3d(block_out_channels[0], out_channels, kernel_size=3, padding=1))
+
+    def set_use_flash_attention(self, enabled: bool) -> bool:
+        effective = bool(enabled and Attention.flash_attention_available())
+        for module in self.modules():
+            if isinstance(module, Attention):
+                module.set_flash_attention(effective)
+        self._flash_attention_enabled = effective
+        return effective
+
+    @property
+    def use_flash_attention(self) -> bool:
+        return self._flash_attention_enabled
 
     def set_attention_slice(self, slice_size):
         r"""

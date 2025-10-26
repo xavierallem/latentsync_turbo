@@ -1,10 +1,15 @@
 # Adapted from https://github.com/TMElyralab/MuseTalk/blob/main/musetalk/whisper/audio2feature.py
 
-from .whisper import load_model
-import numpy as np
-import torch
 import os
 from pathlib import Path
+from typing import List, Tuple, Union
+
+import numpy as np
+import torch
+
+from .whisper import load_model
+
+__all__ = ["Audio2Feature"]
 
 
 class Audio2Feature:
@@ -14,7 +19,7 @@ class Audio2Feature:
         device=None,
         audio_embeds_cache_dir=None,
         num_frames=16,
-        audio_feat_length=[2, 2],
+        audio_feat_length: Union[List[int], Tuple[int, int]] = (2, 2),
     ):
         self.model = load_model(model_path, device)
         self.audio_embeds_cache_dir = audio_embeds_cache_dir
@@ -22,16 +27,9 @@ class Audio2Feature:
             Path(audio_embeds_cache_dir).mkdir(parents=True, exist_ok=True)
         self.num_frames = num_frames
         self.embedding_dim = self.model.dims.n_audio_state
-        self.audio_feat_length = audio_feat_length
+        self.audio_feat_length = list(audio_feat_length)
 
     def get_sliced_feature(self, feature_array, vid_idx, fps=25):
-        """
-        Get sliced features based on a given index
-        :param feature_array:
-        :param start_idx: the start index of the feature
-        :param audio_feat_length:
-        :return:
-        """
         length = len(feature_array)
         selected_feature = []
         selected_idx = []
@@ -48,17 +46,10 @@ class Audio2Feature:
             selected_idx.append(idx)
 
         selected_feature = torch.cat(selected_feature, dim=0)
-        selected_feature = selected_feature.reshape(-1, self.embedding_dim)  # 50*384
+        selected_feature = selected_feature.reshape(-1, self.embedding_dim)
         return selected_feature, selected_idx
 
     def get_sliced_feature_sparse(self, feature_array, vid_idx, fps=25):
-        """
-        Get sliced features based on a given index
-        :param feature_array:
-        :param start_idx: the start index of the feature
-        :param audio_feat_length:
-        :return:
-        """
         length = len(feature_array)
         selected_feature = []
         selected_idx = []
@@ -81,7 +72,7 @@ class Audio2Feature:
                 selected_idx.append(left_idx - 1)
                 selected_idx.append(left_idx)
         selected_feature = np.concatenate(selected_feature, axis=0)
-        selected_feature = selected_feature.reshape(-1, self.embedding_dim)  # 50*384
+        selected_feature = selected_feature.reshape(-1, self.embedding_dim)
         selected_feature = torch.from_numpy(selected_feature)
         return selected_feature, selected_idx
 
@@ -94,7 +85,6 @@ class Audio2Feature:
         while True:
             start_idx = int(i * whisper_idx_multiplier)
             selected_feature, selected_idx = self.get_sliced_feature(feature_array=feature_array, vid_idx=i, fps=fps)
-            # print(f"i:{i},selected_idx {selected_idx}")
             whisper_chunks.append(selected_feature)
             i += 1
             if start_idx > len(feature_array):
@@ -103,7 +93,6 @@ class Audio2Feature:
         return whisper_chunks
 
     def _audio2feat(self, audio_path: str):
-        # get the sample rate of the audio
         result = self.model.transcribe(audio_path)
         embed_list = []
         for emb in result["segments"]:

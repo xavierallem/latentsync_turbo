@@ -14,6 +14,14 @@ from diffusers.models.attention import FeedForward, AdaLayerNorm
 
 from einops import rearrange, repeat
 
+try:
+    from flash_attn.flash_attn_interface import flash_attn_func
+
+    _FLASH_ATTENTION_AVAILABLE = True
+except Exception:  # noqa: BLE001
+    flash_attn_func = None
+    _FLASH_ATTENTION_AVAILABLE = False
+
 
 @dataclass
 class Transformer3DModelOutput(BaseOutput):
@@ -38,11 +46,13 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
         only_cross_attention: bool = False,
         upcast_attention: bool = False,
         add_audio_layer=False,
+        use_flash_attention: bool = False,
     ):
         super().__init__()
         self.use_linear_projection = use_linear_projection
         self.num_attention_heads = num_attention_heads
         self.attention_head_dim = attention_head_dim
+        self.use_flash_attention = use_flash_attention
         inner_dim = num_attention_heads * attention_head_dim
 
         # Define input layers
@@ -68,6 +78,7 @@ class Transformer3DModel(ModelMixin, ConfigMixin):
                     attention_bias=attention_bias,
                     upcast_attention=upcast_attention,
                     add_audio_layer=add_audio_layer,
+                    use_flash_attention=use_flash_attention,
                 )
                 for d in range(num_layers)
             ]
@@ -137,10 +148,12 @@ class BasicTransformerBlock(nn.Module):
         attention_bias: bool = False,
         upcast_attention: bool = False,
         add_audio_layer=False,
+        use_flash_attention: bool = False,
     ):
         super().__init__()
         self.use_ada_layer_norm = num_embeds_ada_norm is not None
         self.add_audio_layer = add_audio_layer
+        self.use_flash_attention = use_flash_attention
 
         self.norm1 = AdaLayerNorm(dim, num_embeds_ada_norm) if self.use_ada_layer_norm else nn.LayerNorm(dim)
         self.attn1 = Attention(
@@ -150,6 +163,7 @@ class BasicTransformerBlock(nn.Module):
             dropout=dropout,
             bias=attention_bias,
             upcast_attention=upcast_attention,
+            use_flash_attention=use_flash_attention,
         )
 
         # Cross-attn
@@ -163,6 +177,7 @@ class BasicTransformerBlock(nn.Module):
                 dropout=dropout,
                 bias=attention_bias,
                 upcast_attention=upcast_attention,
+                use_flash_attention=use_flash_attention,
             )
         else:
             self.attn2 = None
@@ -207,20 +222,23 @@ class Attention(nn.Module):
         heads: int = 8,
         dim_head: int = 64,
         dropout: float = 0.0,
-        bias=False,
+        bias: bool = False,
         upcast_attention: bool = False,
         upcast_softmax: bool = False,
         norm_num_groups: Optional[int] = None,
-    ):
+        use_flash_attention: bool = False,
+    ) -> None:
         super().__init__()
         inner_dim = dim_head * heads
         cross_attention_dim = cross_attention_dim if cross_attention_dim is not None else query_dim
         self.upcast_attention = upcast_attention
         self.upcast_softmax = upcast_softmax
+        self._flash_enabled = bool(use_flash_attention and _FLASH_ATTENTION_AVAILABLE)
 
         self.scale = dim_head**-0.5
 
         self.heads = heads
+        self.head_dim = dim_head
 
         if norm_num_groups is not None:
             self.group_norm = nn.GroupNorm(num_channels=inner_dim, num_groups=norm_num_groups, eps=1e-5, affine=True)
@@ -231,50 +249,88 @@ class Attention(nn.Module):
         self.to_k = nn.Linear(cross_attention_dim, inner_dim, bias=bias)
         self.to_v = nn.Linear(cross_attention_dim, inner_dim, bias=bias)
 
-        self.to_out = nn.ModuleList([])
-        self.to_out.append(nn.Linear(inner_dim, query_dim))
-        self.to_out.append(nn.Dropout(dropout))
+        self.to_out = nn.ModuleList([nn.Linear(inner_dim, query_dim), nn.Dropout(dropout)])
 
-    def split_heads(self, tensor):
+    @staticmethod
+    def flash_attention_available() -> bool:
+        return _FLASH_ATTENTION_AVAILABLE
+
+    def set_flash_attention(self, enabled: bool) -> bool:
+        self._flash_enabled = bool(enabled and _FLASH_ATTENTION_AVAILABLE)
+        return self._flash_enabled
+
+    def split_heads(self, tensor: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len, dim = tensor.shape
         tensor = tensor.reshape(batch_size, seq_len, self.heads, dim // self.heads)
         tensor = tensor.permute(0, 2, 1, 3)
         return tensor
 
-    def concat_heads(self, tensor):
+    def concat_heads(self, tensor: torch.Tensor) -> torch.Tensor:
         batch_size, heads, seq_len, head_dim = tensor.shape
         tensor = tensor.permute(0, 2, 1, 3)
         tensor = tensor.reshape(batch_size, seq_len, heads * head_dim)
         return tensor
 
+    def _flash_attention(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+    ) -> Optional[torch.Tensor]:
+        if not self._flash_enabled:
+            return None
+        if attention_mask is not None:
+            return None
+        if not query.is_cuda:
+            return None
+        if query.dtype not in (torch.float16, torch.bfloat16):
+            return None
+        if query.shape[2] != key.shape[2] or key.shape[2] != value.shape[2]:
+            return None
+        if flash_attn_func is None:
+            return None
+        try:
+            q = query.permute(0, 2, 1, 3).contiguous()
+            k = key.permute(0, 2, 1, 3).contiguous()
+            v = value.permute(0, 2, 1, 3).contiguous()
+            out = flash_attn_func(q, k, v, dropout_p=0.0, softmax_scale=None)
+            return out.permute(0, 2, 1, 3)
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _apply_attention(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        attention_mask: Optional[torch.Tensor],
+    ) -> torch.Tensor:
+        flash_out = self._flash_attention(query, key, value, attention_mask)
+        if flash_out is not None:
+            return flash_out
+        return F.scaled_dot_product_attention(query, key, value, attn_mask=attention_mask)
+
     def forward(self, hidden_states, encoder_hidden_states=None, attention_mask=None):
         if self.group_norm is not None:
             hidden_states = self.group_norm(hidden_states.transpose(1, 2)).transpose(1, 2)
 
-        query = self.to_q(hidden_states)
-        query = self.split_heads(query)
+        query = self.split_heads(self.to_q(hidden_states))
 
         encoder_hidden_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
-        key = self.to_k(encoder_hidden_states)
-        value = self.to_v(encoder_hidden_states)
-
-        key = self.split_heads(key)
-        value = self.split_heads(value)
+        key = self.split_heads(self.to_k(encoder_hidden_states))
+        value = self.split_heads(self.to_v(encoder_hidden_states))
 
         if attention_mask is not None:
-            if attention_mask.shape[-1] != query.shape[1]:
-                target_length = query.shape[1]
+            if attention_mask.shape[-1] != query.shape[2]:
+                target_length = query.shape[2]
                 attention_mask = F.pad(attention_mask, (0, target_length), value=0.0)
                 attention_mask = attention_mask.repeat_interleave(self.heads, dim=0)
 
-        # Use PyTorch native implementation of FlashAttention-2
-        hidden_states = F.scaled_dot_product_attention(query, key, value, attn_mask=attention_mask)
+        hidden_states = self._apply_attention(query, key, value, attention_mask)
 
         hidden_states = self.concat_heads(hidden_states)
 
-        # linear proj
         hidden_states = self.to_out[0](hidden_states)
-
-        # dropout
         hidden_states = self.to_out[1](hidden_states)
         return hidden_states

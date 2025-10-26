@@ -29,6 +29,10 @@ from DeepCache import DeepCacheSDHelper
 
 
 def main(config, args):
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cudnn.benchmark = True
+
     if not os.path.exists(args.video_path):
         raise RuntimeError(f"Video path '{args.video_path}' not found")
     if not os.path.exists(args.audio_path):
@@ -47,6 +51,7 @@ def main(config, args):
         scheduler = DPMSolverMultistepScheduler.from_config(
             scheduler.config,
             lower_order_final=True,
+            
         )
         if getattr(scheduler.config, "steps_offset", 0) != 0:
             scheduler.register_to_config(steps_offset=0)
@@ -64,9 +69,11 @@ def main(config, args):
     else:
         raise NotImplementedError("cross_attention_dim must be 768 or 384")
 
+    print(f"Whisper model path: {whisper_model_path}")
+
     audio_encoder = Audio2Feature(
         model_path=whisper_model_path,
-        device="cuda",
+        device="cuda" if torch.cuda.is_available() else "cpu",
         num_frames=config.data.num_frames,
         audio_feat_length=config.data.audio_feat_length,
     )
@@ -82,6 +89,17 @@ def main(config, args):
     )
 
     unet = unet.to(dtype=dtype)
+
+    requested_flash = getattr(args, "use_flash_attention", False)
+    flash_enabled = unet.set_use_flash_attention(requested_flash)
+
+    if requested_flash:
+        if flash_enabled:
+            print("Flash attention requested and successfully enabled.")
+        else:
+            print("Flash attention requested but not available; falling back to PyTorch attention.")
+    else:
+        print("Flash attention not requested; using PyTorch attention path.")
 
     pipeline = LipsyncPipeline(
         vae=vae,
@@ -120,6 +138,7 @@ def main(config, args):
         )
 
     metrics = telemetry.metrics()
+    metrics["use_flash_attention"] = bool(getattr(args, "use_flash_attention", False))
 
     temp_dir = Path(args.temp_dir)
     temp_dir.mkdir(parents=True, exist_ok=True)
@@ -135,6 +154,7 @@ def main(config, args):
         "guidance_scale": args.guidance_scale,
         "inference_steps": args.inference_steps,
         "use_dpm_solver": getattr(args, "use_dpm_solver", False),
+        "use_flash_attention": getattr(args, "use_flash_attention", False),
         "seed": int(args.seed) if hasattr(args, "seed") else None,
         "metrics": metrics,
     }
@@ -157,6 +177,7 @@ if __name__ == "__main__":
     parser.add_argument("--enable_deepcache", action="store_true")
     parser.set_defaults(use_dpm_solver=True)
     parser.add_argument("--use_dpm_solver", action="store_true")
+    parser.add_argument("--use_flash_attention", action="store_true")
     parser.add_argument(
         "--use_ddim_scheduler",
         action="store_false",

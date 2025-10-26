@@ -19,6 +19,7 @@ def process_video(
     guidance_scale,
     inference_steps,
     use_dpm_solver,
+    use_flash_attention,
     seed,
 ):
     # Create the temp directory if it doesn't exist
@@ -51,6 +52,7 @@ def process_video(
         inference_steps,
         guidance_scale,
         use_dpm_solver,
+        use_flash_attention,
         seed,
     )
 
@@ -66,6 +68,7 @@ def process_video(
         raise gr.Error(f"Error during processing: {str(exc)}") from exc
 
     metrics = telemetry.metrics()
+    metrics["use_flash_attention"] = bool(use_flash_attention)
 
     metrics_record = {
         "timestamp": current_time,
@@ -75,6 +78,7 @@ def process_video(
         "guidance_scale": guidance_scale,
         "inference_steps": inference_steps,
         "use_dpm_solver": use_dpm_solver,
+        "use_flash_attention": use_flash_attention,
         "seed": int(seed),
         "metrics": metrics,
     }
@@ -94,6 +98,7 @@ def create_args(
     inference_steps: int,
     guidance_scale: float,
     use_dpm_solver: bool,
+    use_flash_attention: bool,
     seed: int,
 ) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -108,6 +113,7 @@ def create_args(
     parser.add_argument("--enable_deepcache", action="store_true")
     parser.set_defaults(use_dpm_solver=True)
     parser.add_argument("--use_dpm_solver", action="store_true")
+    parser.add_argument("--use_flash_attention", action="store_true")
     parser.add_argument(
         "--use_ddim_scheduler",
         action="store_false",
@@ -133,6 +139,7 @@ def create_args(
             "--enable_deepcache",
         ]
         + (["--use_dpm_solver"] if use_dpm_solver else ["--use_ddim_scheduler"])
+        + (["--use_flash_attention"] if use_flash_attention else [])
         + [
             "--seed",
             str(seed),
@@ -174,6 +181,7 @@ with gr.Blocks(title="LatentSync demo") as demo:
 
             with gr.Row():
                 use_dpm_solver = gr.Checkbox(label="Use DPM-Solver scheduler", value=True)
+                use_flash_attention = gr.Checkbox(label="Enable FlashAttention", value=False)
                 seed = gr.Number(value=1247, label="Random Seed", precision=0)
 
             process_btn = gr.Button("Process Video")
@@ -199,6 +207,7 @@ with gr.Blocks(title="LatentSync demo") as demo:
             guidance_scale,
             inference_steps,
             use_dpm_solver,
+            use_flash_attention,
             seed,
         ],
         outputs=[video_output, metrics_output],
