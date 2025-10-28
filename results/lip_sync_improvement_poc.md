@@ -25,6 +25,7 @@ Through experimentation with various configs (see `results/README.md`), key limi
 1. **Voice Activity Detection (VAD) Integration**: Filter audio to process only speech segments, reducing noise and improving focus on relevant features.
 2. **Post-Processing Upscaling**: Apply RealESRGAN or native ffmpeg (bilinear or nearest neighbor interpolation) to 256x256 outputs for higher perceived quality without re-running inference.
 3. **Enhanced Audio Encoder**: Swap to AV-HuBERT for better audio-visual alignment, potentially improving SyncNet scores by 20-30% based on literature.
+4. **RealTime ASR**: Cartesian Ai just launched their realtime AI ASR 
 
 ### Implement One Improvement as Proof-of-Concept
 
