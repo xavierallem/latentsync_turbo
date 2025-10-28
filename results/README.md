@@ -18,6 +18,27 @@ This document analyzes the performance metrics from various inference configurat
 
 
 ### Note:- Whisper Tiny Quants
+
+## Video Results
+
+Here are playable examples of the generated videos for key configurations:
+
+### Best Overall: 8-bit Quant + DPM 17 (256px)
+Highest SyncNet confidence with good performance
+<video src="https://github.com/xavierallem/latentsync_turbo/raw/main/results/video_Q8_E.mp4" controls preload="metadata" width="100%"></video>
+
+### Fastest: DPM 17 Steps (256px)
+Good quality with fastest inference
+<video src="https://github.com/xavierallem/latentsync_turbo/raw/main/results/video_DPM_E.mp4" controls preload="metadata" width="100%"></video>
+
+### Baseline Comparison: DDIM 25 Steps (256px)
+Traditional approach for comparison
+<video src="https://github.com/xavierallem/latentsync_turbo/raw/main/results/video_out_baseline_25step_E.mp4" controls preload="metadata" width="100%"></video>
+
+### Optimized: DPM Tweek (512px)
+Torch optimizations for 512px resolution
+<video src="https://github.com/xavierallem/latentsync_turbo/raw/main/results/video_out_DPM_tweek.mp4" controls preload="metadata" width="100%"></video>
+
 ## Key Findings
 
 - **Resolution Impact**: 256x256 configs use ~40% less memory (7.5-7.6 GB vs. 13.4 GB) and are ~20-25x faster, with significantly higher SyncNet confidence (9.75-9.84 vs. 1.99-2.06) across schedulers.
