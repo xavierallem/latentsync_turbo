@@ -23,21 +23,34 @@ This document analyzes the performance metrics from various inference configurat
 
 Here are playable examples of the generated videos for key configurations:
 
-### Best Overall: 8-bit Quant + DPM 17 (256px)
-Highest SyncNet confidence with good performance
-<video src="https://github.com/xavierallem/latentsync_turbo/raw/main/results/video_Q8_E.mp4" controls preload="metadata" width="100%"></video>
+<table class="center">
+  <tr style="font-weight: bolder;text-align:center;">
+    <td width="50%"><b>Best Overall: 8-bit Quant + DPM 17 (256px)</b></td>
+    <td width="50%"><b>Fastest: DPM 17 Steps (256px)</b></td>
+  </tr>
+  <tr>
+    <td>
+      <video src="video_Q8_E.mp4" controls preload="metadata" width="50%"></video>
+    </td>
+    <td>
+      <video src="video_DPM_E.mp4" controls preload="metadata" width="50%"></video>
+    </td>
+  </tr>
+  <tr style="font-weight: bolder;text-align:center;">
+    <td width="50%"><b>Baseline: DDIM 25 Steps (256px)</b></td>
+    <td width="50%"><b>Optimized: DPM Tweek (512px)</b></td>
+  </tr>
+  <tr>
+    <td>
+      <video src="video_out_baseline_25step_E.mp4" controls preload="metadata" width="50%"></video>
+    </td>
+    <td>
+      <video src="video_out_DPM_tweek.mp4" controls preload="metadata" width="50%"></video>
+    </td>
+  </tr>
+</table>
 
-### Fastest: DPM 17 Steps (256px)
-Good quality with fastest inference
-<video src="https://github.com/xavierallem/latentsync_turbo/raw/main/results/video_DPM_E.mp4" controls preload="metadata" width="100%"></video>
-
-### Baseline Comparison: DDIM 25 Steps (256px)
-Traditional approach for comparison
-<video src="https://github.com/xavierallem/latentsync_turbo/raw/main/results/video_out_baseline_25step_E.mp4" controls preload="metadata" width="100%"></video>
-
-### Optimized: DPM Tweek (512px)
-Torch optimizations for 512px resolution
-<video src="https://github.com/xavierallem/latentsync_turbo/raw/main/results/video_out_DPM_tweek.mp4" controls preload="metadata" width="100%"></video>
+*Highest SyncNet confidence (9.84) | Good quality + fastest inference | Traditional approach comparison | Torch optimizations for 512px*
 
 ## Key Findings
 
