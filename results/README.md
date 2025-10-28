@@ -30,10 +30,10 @@ Here are playable examples of the generated videos for key configurations. Video
   </tr>
   <tr>
     <td>
-      <video src="https://github.com/user-attachments/assets/video_Q8_E.mp4" controls preload="metadata" width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/1ee4323a-8e88-495b-bc00-d4836690d109" controls preload="metadata" width="100%"></video>
     </td>
     <td>
-      <video src="https://github.com/user-attachments/assets/video_DPM_E.mp4" controls preload="metadata" width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/9f295827-6929-43bb-b8f1-05ef175c5224" controls preload="metadata" width="100%"></video>
     </td>
   </tr>
   <tr style="font-weight: bolder;text-align:center;">
@@ -42,10 +42,10 @@ Here are playable examples of the generated videos for key configurations. Video
   </tr>
   <tr>
     <td>
-      <video src="https://github.com/user-attachments/assets/video_out_baseline_25step_E.mp4" controls preload="metadata" width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/879b7080-1344-43f0-8175-f3d114e79d93" controls preload="metadata" width="100%"></video>
     </td>
     <td>
-      <video src="https://github.com/user-attachments/assets/video_out_DPM_tweek.mp4" controls preload="metadata" width="100%"></video>
+      <video src="https://github.com/user-attachments/assets/63a600cc-6b0b-4962-9833-b2f3d027cbf0" controls preload="metadata" width="100%"></video>
     </td>
   </tr>
 </table>
