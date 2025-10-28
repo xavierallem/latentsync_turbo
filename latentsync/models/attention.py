@@ -18,7 +18,7 @@ try:
     from flash_attn.flash_attn_interface import flash_attn_func
 
     _FLASH_ATTENTION_AVAILABLE = True
-except Exception:  # noqa: BLE001
+except ImportError:
     flash_attn_func = None
     _FLASH_ATTENTION_AVAILABLE = False
 
@@ -296,7 +296,7 @@ class Attention(nn.Module):
             v = value.permute(0, 2, 1, 3).contiguous()
             out = flash_attn_func(q, k, v, dropout_p=0.0, softmax_scale=None)
             return out.permute(0, 2, 1, 3)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return None
 
     def _apply_attention(

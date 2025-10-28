@@ -76,6 +76,7 @@ def main(config, args):
         device="cuda" if torch.cuda.is_available() else "cpu",
         num_frames=config.data.num_frames,
         audio_feat_length=config.data.audio_feat_length,
+        use_quantization=getattr(args, "use_quantization", False),
     )
 
     vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-mse", torch_dtype=dtype)
@@ -177,7 +178,7 @@ if __name__ == "__main__":
     parser.add_argument("--enable_deepcache", action="store_true")
     parser.set_defaults(use_dpm_solver=True)
     parser.add_argument("--use_dpm_solver", action="store_true")
-    parser.add_argument("--use_flash_attention", action="store_true")
+    parser.add_argument("--use_quantization", action="store_true", help="Use 4-bit quantized Whisper model for inference.")
     parser.add_argument(
         "--use_ddim_scheduler",
         action="store_false",

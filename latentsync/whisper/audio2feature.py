@@ -6,8 +6,9 @@ from typing import List, Tuple, Union
 
 import numpy as np
 import torch
+from transformers import WhisperProcessor, WhisperModel, BitsAndBytesConfig
 
-from .whisper import load_model
+from .whisper import load_model  # Keep for fallback if needed
 
 __all__ = ["Audio2Feature"]
 
@@ -20,13 +21,43 @@ class Audio2Feature:
         audio_embeds_cache_dir=None,
         num_frames=16,
         audio_feat_length: Union[List[int], Tuple[int, int]] = (2, 2),
+        use_quantization=False,
     ):
-        self.model = load_model(model_path, device)
+        self.use_quantization = use_quantization
+        if device is None:
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = device
+
+        if use_quantization:
+            # Use HF Whisper with 8-bit quantization
+            bnb_config = BitsAndBytesConfig(
+                load_in_8bit=True
+            )
+            #             # Use HF Whisper with 4-bit quantization
+            # bnb_config = BitsAndBytesConfig(
+            #     load_in_4bit=True,
+            #     bnb_4bit_compute_dtype=torch.float16,
+            #     bnb_4bit_use_double_quant=True,
+            #     bnb_4bit_quant_type='nf4'
+            # )
+            self.processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+            self.model = WhisperModel.from_pretrained(
+                "openai/whisper-tiny",
+                quantization_config=bnb_config,
+                device_map="auto",
+                trust_remote_code=False,
+                use_safetensors=True
+            )
+            self.embedding_dim = self.model.config.d_model
+        else:
+            # Fallback to original OpenAI Whisper
+            self.model = load_model(model_path, device)
+            self.embedding_dim = self.model.dims.n_audio_state
+
         self.audio_embeds_cache_dir = audio_embeds_cache_dir
         if audio_embeds_cache_dir is not None and audio_embeds_cache_dir != "":
             Path(audio_embeds_cache_dir).mkdir(parents=True, exist_ok=True)
         self.num_frames = num_frames
-        self.embedding_dim = self.model.dims.n_audio_state
         self.audio_feat_length = list(audio_feat_length)
 
     def get_sliced_feature(self, feature_array, vid_idx, fps=25):
@@ -93,18 +124,46 @@ class Audio2Feature:
         return whisper_chunks
 
     def _audio2feat(self, audio_path: str):
-        result = self.model.transcribe(audio_path)
-        embed_list = []
-        for emb in result["segments"]:
-            encoder_embeddings = emb["encoder_embeddings"]
-            encoder_embeddings = encoder_embeddings.transpose(0, 2, 1, 3)
-            encoder_embeddings = encoder_embeddings.squeeze(0)
-            start_idx = int(emb["start"])
-            end_idx = int(emb["end"])
-            emb_end_idx = int((end_idx - start_idx) / 2)
-            embed_list.append(encoder_embeddings[:emb_end_idx])
-        concatenated_array = torch.from_numpy(np.concatenate(embed_list, axis=0))
-        return concatenated_array
+        if self.use_quantization:
+            # Use HF Whisper
+            import librosa
+
+            # Load audio
+            audio, sr = librosa.load(audio_path, sr=16000)
+            input_features = self.processor(audio, sampling_rate=16000, return_tensors="pt").input_features.to(self.device)
+
+            # Cast to float16 to match compute dtype
+            input_features = input_features.to(torch.float16)
+
+            # Get encoder outputs
+            with torch.no_grad():
+                encoder_outputs = self.model.encoder(input_features)
+                # encoder_outputs.last_hidden_state shape: (batch, seq, hidden) -> (1, seq, 384)
+                features = encoder_outputs.last_hidden_state.squeeze(0)  # [seq, 384]
+                
+                # Group into chunks of 5 to match original's [n, 5, 384] style
+                seq_len = features.shape[0]
+                group_size = 5
+                if seq_len % group_size != 0:
+                    # Pad to make divisible
+                    pad_len = group_size - (seq_len % group_size)
+                    features = torch.cat([features, torch.zeros(pad_len, 384, device=features.device, dtype=features.dtype)], dim=0)
+                features = features.view(-1, group_size, 384)  # [num_groups, 5, 384]
+                return features
+        else:
+            # Original OpenAI Whisper
+            result = self.model.transcribe(audio_path)
+            embed_list = []
+            for emb in result["segments"]:
+                encoder_embeddings = emb["encoder_embeddings"]
+                encoder_embeddings = encoder_embeddings.transpose(0, 2, 1, 3)
+                encoder_embeddings = encoder_embeddings.squeeze(0)
+                start_idx = int(emb["start"])
+                end_idx = int(emb["end"])
+                emb_end_idx = int((end_idx - start_idx) / 2)
+                embed_list.append(encoder_embeddings[:emb_end_idx])
+            concatenated_array = torch.from_numpy(np.concatenate(embed_list, axis=0))
+            return concatenated_array
 
     def audio2feat(self, audio_path):
         if self.audio_embeds_cache_dir == "" or self.audio_embeds_cache_dir is None:

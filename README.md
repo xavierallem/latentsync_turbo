@@ -11,6 +11,7 @@
 
 ## 🔥 Updates
 
+- `2025/10/28`: Added Whisper audio encoder quantization (4-bit/8-bit) for memory efficiency, comprehensive results analysis with video outputs in `results/`, lip-sync improvement proof-of-concept, AWS deployment framework, and code cleanup (removed SageAttention). Updates by Allen.
 - `2025/10/25`: Added community-supplied inference optimizations (scheduler safeguards, CLI telemetry logging, optional DDIM fallback) while keeping the upstream model unchanged. Full credit remains with the original LatentSync authors.
 - `2025/06/11`: We released **LatentSync 1.6**, which is trained on 512 $\times$ 512 resolution videos to mitigate the blurriness problem. Watch the demo [here](docs/changelog_v1.6.md).
 
@@ -121,6 +122,8 @@ Run the Gradio app for inference:
 python gradio_app.py
 ```
 
+The app now saves output videos and metrics JSONs directly to the `results/` folder for easy access and analysis.
+
 ### 2. Command Line Interface
 
 Run the script for inference:
@@ -133,8 +136,12 @@ You can try adjusting the following inference parameters to achieve better resul
 
 - `inference_steps` [20-50]: A higher value improves visual quality but slows down the generation speed.
 - `guidance_scale` [1.0-3.0]: A higher value improves lip-sync accuracy but may cause the video distortion or jitter.
-- `--use_ddim_scheduler`: Toggle to the legacy DDIM sampler when you prefer the original setup; DPM-Solver remains available with internal guards to prevent sigma overflows.
-- Telemetry: CLI and Gradio runs now emit JSON metrics (runtime, GPU/CPU memory) into `temp/` for easier profiling during experiments.
+- `--use_dpm_solver`: Use DPM-Solver scheduler for faster inference (recommended).
+- `--use_quantization`: Enable 8-bit quantization for the Whisper audio encoder to reduce memory usage (experimental, may affect quality).
+- `--use_flash_attention`: Enable Flash Attention 2 for potential speed improvements.
+- Telemetry: CLI and Gradio runs now emit JSON metrics (runtime, GPU/CPU memory) into `results/` for easier profiling during experiments.
+
+For detailed performance analysis and comparisons, see [results/README.md](results/README.md).
 
 ## 🔄 Data Processing Pipeline
 
@@ -209,6 +216,12 @@ You can evaluate the accuracy of SyncNet on a dataset by running the following s
 ```
 
 Note that our released SyncNet is trained on data processed through our data processing pipeline, which includes special operations such as affine transformation and audio-visual adjustment. Therefore, before evaluation, the test data must first be processed using the provided pipeline.
+
+## 🔍 Results and Improvements
+
+- **Performance Analysis**: Comprehensive benchmarking results across resolutions, schedulers, and optimizations are available in [results/README.md](results/README.md), including video outputs uploaded to the repo.
+- **Lip-Sync Enhancements**: Proof-of-concept for quality improvements, including VAD integration and model swap strategies, detailed in [results/lip_sync_improvement_poc.md](results/lip_sync_improvement_poc.md).
+- **AWS Deployment**: Complete infrastructure and deployment guide for production deployment on AWS EKS with GPU support, monitoring, and auto-scaling in [results/deployment.md](results/deployment.md).
 
 ## 🙏 Acknowledgement
 

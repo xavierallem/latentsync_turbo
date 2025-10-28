@@ -63,7 +63,7 @@ def process_video(
                 config=config,
                 args=args,
             )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"Error during processing: {str(exc)}")
         raise gr.Error(f"Error during processing: {str(exc)}") from exc
 

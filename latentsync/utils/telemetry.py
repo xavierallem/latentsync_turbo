@@ -10,7 +10,7 @@ try:
     import psutil  # type: ignore
 
     _PSUTIL_AVAILABLE = True
-except Exception:  # noqa: BLE001
+except ImportError:
     psutil = None
     _PSUTIL_AVAILABLE = False
 
@@ -19,7 +19,7 @@ try:
 
     pynvml.nvmlInit()
     _NVML_AVAILABLE = True
-except Exception:  # noqa: BLE001
+except ImportError:
     pynvml = None
     _NVML_AVAILABLE = False
 
@@ -44,7 +44,7 @@ class GPUMonitor:
 
         try:
             self._handle = pynvml.nvmlDeviceGetHandleByIndex(self.device_index)
-        except Exception:  # noqa: BLE001
+        except Exception:
             return
 
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -79,7 +79,7 @@ class GPUMonitor:
                 util = pynvml.nvmlDeviceGetUtilizationRates(self._handle)
                 mem = pynvml.nvmlDeviceGetMemoryInfo(self._handle)
                 self._samples.append((float(util.gpu), float(util.memory), mem.used / (1024**2)))
-            except Exception:  # noqa: BLE001
+            except Exception:
                 break
             time.sleep(self.interval)
 
