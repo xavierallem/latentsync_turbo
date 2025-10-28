@@ -21,7 +21,7 @@ This document analyzes the performance metrics from various inference configurat
 
 ## Video Results
 
-Here are playable examples of the generated videos for key configurations:
+Here are playable examples of the generated videos for key configurations. Videos are attached as GitHub assets for better performance.
 
 <table class="center">
   <tr style="font-weight: bolder;text-align:center;">
@@ -30,10 +30,10 @@ Here are playable examples of the generated videos for key configurations:
   </tr>
   <tr>
     <td>
-      <video src="video_Q8_E.mp4" controls preload="metadata" width="50%"></video>
+      <video src="https://github.com/user-attachments/assets/video_Q8_E.mp4" controls preload="metadata" width="100%"></video>
     </td>
     <td>
-      <video src="video_DPM_E.mp4" controls preload="metadata" width="50%"></video>
+      <video src="https://github.com/user-attachments/assets/video_DPM_E.mp4" controls preload="metadata" width="100%"></video>
     </td>
   </tr>
   <tr style="font-weight: bolder;text-align:center;">
@@ -42,10 +42,10 @@ Here are playable examples of the generated videos for key configurations:
   </tr>
   <tr>
     <td>
-      <video src="video_out_baseline_25step_E.mp4" controls preload="metadata" width="50%"></video>
+      <video src="https://github.com/user-attachments/assets/video_out_baseline_25step_E.mp4" controls preload="metadata" width="100%"></video>
     </td>
     <td>
-      <video src="video_out_DPM_tweek.mp4" controls preload="metadata" width="50%"></video>
+      <video src="https://github.com/user-attachments/assets/video_out_DPM_tweek.mp4" controls preload="metadata" width="100%"></video>
     </td>
   </tr>
 </table>
